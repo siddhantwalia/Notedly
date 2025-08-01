@@ -29,13 +29,15 @@ faiss_cache = {}  # Add this here for shared access across requests
 # Global in-memory cache for chat histories (key: session_id, value: list of (question, answer) tuples)
 chat_histories = {}  # For maintaining conversational context across requests
 
+# Global variable to store the most recent document URL (for single-document assumption)
+document_url = ""
+
 
 class DocumentRequest(BaseModel):
     documents: str  # URL of the document to process
 
 
 class ChatRequest(BaseModel):
-    document_url: str  # URL of the cached document to query against
     question: str
     session_id: Optional[str] = None  # Optional session ID for chat history continuity
 
@@ -52,8 +54,9 @@ async def hehe():
 
 @app.post("/doc")
 async def process_document(req: DocumentRequest):
+    global document_url  # Declare as global to modify it
     start = time.time()
-    
+    document_url = req.documents  # Update the global with the latest document URL
     cache_key = req.documents  
     if cache_key in faiss_cache:
         logger.info("Using cached FAISS retriever")
@@ -102,7 +105,10 @@ async def process_document(req: DocumentRequest):
 async def get_response(req: ChatRequest):
     start = time.time()
     
-    cache_key = req.document_url
+    if not document_url:
+        raise HTTPException(status_code=400, detail="No document has been processed yet. Please call /doc first.")
+    
+    cache_key = document_url
     if cache_key not in faiss_cache:
         raise HTTPException(status_code=404, detail="Document not found or not processed. Please process via /doc first.")
     
